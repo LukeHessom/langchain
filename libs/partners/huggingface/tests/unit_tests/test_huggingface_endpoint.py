@@ -1,5 +1,6 @@
 """Tests for HuggingFaceEndpoint with local/custom endpoint_url (no HF API calls)."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -83,25 +84,59 @@ def test_huggingface_hosted_endpoint_keeps_api_key(
 
 @patch("huggingface_hub.AsyncInferenceClient")
 @patch("huggingface_hub.InferenceClient")
-def test_huggingface_endpoint_embeddings_passes_base_url(
+def test_huggingface_endpoint_embeddings_uses_custom_endpoint_url(
     mock_inference_client: MagicMock,
     mock_async_client: MagicMock,
 ) -> None:
-    """Embedding endpoints pass base_url to sync and async clients."""
+    """Embedding clients use a custom endpoint without forwarding an HF token."""
     mock_inference_client.return_value = MagicMock()
     mock_async_client.return_value = MagicMock()
 
     HuggingFaceEndpointEmbeddings(
-        model="sentence-transformers/all-mpnet-base-v2",
-        base_url="http://localhost:8081",
+        endpoint_url="http://localhost:8081",
+        huggingfacehub_api_token="hf_xxx",  # noqa: S106
     )
 
     mock_inference_client.assert_called_once()
     call_kwargs = mock_inference_client.call_args[1]
-    assert call_kwargs.get("model") == "sentence-transformers/all-mpnet-base-v2"
-    assert call_kwargs.get("base_url") == "http://localhost:8081"
+    assert call_kwargs.get("model") == "http://localhost:8081"
+    assert call_kwargs.get("token") is None
+    assert "base_url" not in call_kwargs
 
     mock_async_client.assert_called_once()
     async_call_kwargs = mock_async_client.call_args[1]
-    assert async_call_kwargs.get("model") == "sentence-transformers/all-mpnet-base-v2"
-    assert async_call_kwargs.get("base_url") == "http://localhost:8081"
+    assert async_call_kwargs.get("model") == "http://localhost:8081"
+    assert async_call_kwargs.get("token") is None
+    assert "base_url" not in async_call_kwargs
+
+
+@pytest.mark.parametrize("field_name", ["model", "repo_id"])
+def test_huggingface_endpoint_embeddings_rejects_endpoint_url_with_model(
+    field_name: str,
+) -> None:
+    """Only one model source may be configured."""
+    model_kwargs: dict[str, Any] = {
+        field_name: "sentence-transformers/all-mpnet-base-v2",
+        "endpoint_url": "http://localhost:8081",
+    }
+    with pytest.raises(ValueError, match="not more than one"):
+        HuggingFaceEndpointEmbeddings(**model_kwargs)
+
+
+@patch("huggingface_hub.AsyncInferenceClient")
+@patch("huggingface_hub.InferenceClient")
+def test_huggingface_endpoint_embeddings_keeps_token_for_hf_endpoint(
+    mock_inference_client: MagicMock,
+    mock_async_client: MagicMock,
+) -> None:
+    """Official Hugging Face endpoints continue to receive the configured token."""
+    mock_inference_client.return_value = MagicMock()
+    mock_async_client.return_value = MagicMock()
+
+    HuggingFaceEndpointEmbeddings(
+        endpoint_url="https://example.huggingface.co/inference",
+        huggingfacehub_api_token="hf_xxx",  # noqa: S106
+    )
+
+    assert mock_inference_client.call_args[1].get("token") == "hf_xxx"
+    assert mock_async_client.call_args[1].get("token") == "hf_xxx"
