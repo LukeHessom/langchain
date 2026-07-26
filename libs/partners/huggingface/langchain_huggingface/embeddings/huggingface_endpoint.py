@@ -47,6 +47,9 @@ class HuggingFaceEndpointEmbeddings(BaseModel, Embeddings):
     repo_id: str | None = None
     """Huggingfacehub repository id, for backward compatibility."""
 
+    base_url: str | None = None
+    """Base URL to use for a self-hosted Hugging Face-compatible endpoint."""
+
     task: str | None = "feature-extraction"
     """Task to call the model with."""
 
@@ -93,12 +96,14 @@ class HuggingFaceEndpointEmbeddings(BaseModel, Embeddings):
                 model=self.model,
                 token=huggingfacehub_api_token,
                 provider=self.provider,  # type: ignore[arg-type]
+                base_url=self.base_url,
             )
 
             async_client = AsyncInferenceClient(
                 model=self.model,
                 token=huggingfacehub_api_token,
                 provider=self.provider,  # type: ignore[arg-type]
+                base_url=self.base_url,
             )
 
             if self.task not in VALID_TASKS:

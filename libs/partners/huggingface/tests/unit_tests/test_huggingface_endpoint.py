@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from langchain_huggingface.embeddings.huggingface_endpoint import (
+    HuggingFaceEndpointEmbeddings,
+)
 from langchain_huggingface.llms.huggingface_endpoint import (
     HuggingFaceEndpoint,
     _is_huggingface_hosted_url,
@@ -76,3 +79,29 @@ def test_huggingface_hosted_endpoint_keeps_api_key(
 
     call_kwargs = mock_inference_client.call_args[1]
     assert call_kwargs.get("api_key") == "hf_xxx"
+
+
+@patch("huggingface_hub.AsyncInferenceClient")
+@patch("huggingface_hub.InferenceClient")
+def test_huggingface_endpoint_embeddings_passes_base_url(
+    mock_inference_client: MagicMock,
+    mock_async_client: MagicMock,
+) -> None:
+    """Embedding endpoints pass base_url to sync and async clients."""
+    mock_inference_client.return_value = MagicMock()
+    mock_async_client.return_value = MagicMock()
+
+    HuggingFaceEndpointEmbeddings(
+        model="sentence-transformers/all-mpnet-base-v2",
+        base_url="http://localhost:8081",
+    )
+
+    mock_inference_client.assert_called_once()
+    call_kwargs = mock_inference_client.call_args[1]
+    assert call_kwargs.get("model") == "sentence-transformers/all-mpnet-base-v2"
+    assert call_kwargs.get("base_url") == "http://localhost:8081"
+
+    mock_async_client.assert_called_once()
+    async_call_kwargs = mock_async_client.call_args[1]
+    assert async_call_kwargs.get("model") == "sentence-transformers/all-mpnet-base-v2"
+    assert async_call_kwargs.get("base_url") == "http://localhost:8081"
